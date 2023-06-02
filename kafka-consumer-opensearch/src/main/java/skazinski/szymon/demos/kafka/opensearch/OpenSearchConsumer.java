@@ -1,17 +1,18 @@
 package skazinski.szymon.demos.kafka.opensearch;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonParser;
 import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.DefaultConnectionKeepAliveStrategy;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.ConsumerRecords;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.opensearch.action.bulk.BulkRequest;
+import org.opensearch.action.bulk.BulkResponse;
 import org.opensearch.action.index.IndexRequest;
 import org.opensearch.action.index.IndexResponse;
 import org.opensearch.client.RequestOptions;
@@ -32,6 +33,7 @@ import java.util.Properties;
 
 public class OpenSearchConsumer {
 
+    public static final String KAFKA_HOST = "172.31.234.230:9092";
     private static Logger log = LoggerFactory.getLogger(OpenSearchConsumer.class.getSimpleName());
 
     public static void main(String[] args) throws IOException {
@@ -64,20 +66,43 @@ public class OpenSearchConsumer {
                 int count = records.count();
                 log.info("Received " + count + " records");
 
+                BulkRequest bulkRequest = new BulkRequest();
+
 
                 for (ConsumerRecord<String, String> record : records) {
+                    //strategy 1 - using Kafka Record metada
+//                    String id = record.topic() + "_" + record.partition() + "_" + record.offset();
 
                     try {
+                        // strategy 2 -  extracting id from JSON value
+                        String id = extractId(record.value());
                         IndexRequest indexRequest = new IndexRequest(indexName)
-                                .source(record.value(), XContentType.JSON);
+                                .source(record.value(), XContentType.JSON)
+                                .id(id);
 
-                        IndexResponse indexResponse = openSearchClient.index(indexRequest, RequestOptions.DEFAULT);
+//                        IndexResponse indexResponse = openSearchClient.index(indexRequest, RequestOptions.DEFAULT);
 
-                        log.info(indexResponse.getId());
+                        bulkRequest.add(indexRequest);
+//                        log.info(indexResponse.getId());
 
                     } catch (Exception e) {
 
                     }
+                }
+
+                if (bulkRequest.numberOfActions() > 0) {
+                    BulkResponse bulkResponse = openSearchClient.bulk(bulkRequest, RequestOptions.DEFAULT);
+                    log.info("Inserted " + bulkResponse.getItems().length + " records");
+
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException exception) {
+                        exception.printStackTrace();
+                    }
+
+                    //commit offsets after batch is consumed
+                    consumer.commitSync();
+                    log.info("Offsets  has been commited");
                 }
             }
         }
@@ -85,6 +110,15 @@ public class OpenSearchConsumer {
         //Kafka Client
 
 
+    }
+
+    private static String extractId(String json) {
+        return JsonParser.parseString(json)
+                .getAsJsonObject()
+                .get("meta")
+                .getAsJsonObject()
+                .get("id")
+                .getAsString();
     }
 
     private static KafkaConsumer<String, String> createKafkaConsumer() {
