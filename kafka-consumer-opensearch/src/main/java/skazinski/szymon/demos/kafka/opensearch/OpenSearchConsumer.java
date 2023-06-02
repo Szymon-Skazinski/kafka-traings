@@ -93,19 +93,12 @@ public class OpenSearchConsumer {
         String groupId = "consumer-opensearch-demo";
         String topic = "demo_java";
 
-        properties.setProperty("bootstrap.servers", "172.31.234.230:9092");
-        // set producer properties
-        properties.setProperty("key.serializer", StringSerializer.class.getName());
-        properties.setProperty("value.serializer", StringSerializer.class.getName());
-
-
-        properties.setProperty("key.deserializer", StringDeserializer.class.getName());
-        properties.setProperty("value.deserializer", StringDeserializer.class.getName());
-
-        properties.setProperty("group.id", groupId);
-
-        properties.setProperty("auto.offset.reset", OffsetResetStrategy.EARLIEST.toString()); //"none/earliest/latest"
-
+        properties.setProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, KAFKA_HOST);
+        properties.setProperty(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        properties.setProperty(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        properties.setProperty(ConsumerConfig.GROUP_ID_CONFIG, groupId);
+        properties.setProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, OffsetResetStrategy.LATEST.toString());
+        properties.setProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
         //create a consumer
 
         return new KafkaConsumer<>(properties);
