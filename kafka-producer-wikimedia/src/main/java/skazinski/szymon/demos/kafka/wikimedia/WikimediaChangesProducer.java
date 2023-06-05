@@ -14,7 +14,7 @@ public class WikimediaChangesProducer {
 
     public static void main(String[] args) throws InterruptedException {
 
-        String bootstrapServers = "172.31.234.230:9092";
+        String bootstrapServers = "172.31.123.83:9092";
 
         // set producer properties
         Properties properties = new Properties();

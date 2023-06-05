@@ -9,6 +9,7 @@ import org.apache.http.client.CredentialsProvider;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.DefaultConnectionKeepAliveStrategy;
 import org.apache.kafka.clients.consumer.*;
+import org.apache.kafka.common.errors.WakeupException;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.opensearch.action.bulk.BulkRequest;
@@ -33,7 +34,7 @@ import java.util.Properties;
 
 public class OpenSearchConsumer {
 
-    public static final String KAFKA_HOST = "172.31.234.230:9092";
+    public static final String KAFKA_HOST = "172.31.123.83:9092";
     private static Logger log = LoggerFactory.getLogger(OpenSearchConsumer.class.getSimpleName());
 
     public static void main(String[] args) throws IOException {
@@ -42,6 +43,24 @@ public class OpenSearchConsumer {
         RestHighLevelClient openSearchClient = createOpenSearchClient();
 
         KafkaConsumer<String, String> consumer = createKafkaConsumer();
+
+        final Thread mainThread =  Thread.currentThread();
+
+        //shutdown hook
+        Runtime.getRuntime().addShutdownHook(new Thread() {
+            public void run() {
+                log.info("Detected a shutdown, let's exit by calling consumer.wakeup()...");
+                consumer.wakeup();
+
+                // join the main thread to allow the execution of the code in the main thread
+                try {
+                    mainThread.join();
+                } catch (InterruptedException exception) {
+                    exception.printStackTrace();
+                }
+            }
+        });
+
 
         try (openSearchClient; consumer) {
 
@@ -105,6 +124,14 @@ public class OpenSearchConsumer {
                     log.info("Offsets  has been commited");
                 }
             }
+        } catch (WakeupException e) {
+            log.info("Consumer is starting to shut down");
+        } catch (Exception e) {
+            log.error("Unexpected exception in the consumer ", e);
+        } finally {
+            consumer.close(); //close the consumer and also commit offsets
+            openSearchClient.close();
+            log.info("This consumer is now gracefully shutdown");
         }
 
         //Kafka Client
@@ -133,6 +160,7 @@ public class OpenSearchConsumer {
         properties.setProperty(ConsumerConfig.GROUP_ID_CONFIG, groupId);
         properties.setProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, OffsetResetStrategy.LATEST.toString());
         properties.setProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
+//        properties.setProperty(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, Integer.toString(200));
         //create a consumer
 
         return new KafkaConsumer<>(properties);
